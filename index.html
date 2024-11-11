@@ -1,109 +1,182 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vibration Demo</title>
-    <style>
-        body {
-            margin: 0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background-color: #f0f0f0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            touch-action: none;
-            user-select: none;
-            -webkit-user-select: none;
-        }
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      touch-action: none;
+    }
 
-        .touch-area {
-            width: 200px;
-            height: 200px;
-            background-color: #4CAF50;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.2rem;
-            text-align: center;
-            padding: 1rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: transform 0.2s;
-        }
+    #container {
+      position: relative;
+      height: 100vh;
+      width: 100vw;
+    }
 
-        .touch-area:active {
-            transform: scale(0.95);
-        }
+    #overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 0%;
+      transition: height 4s linear;
+    }
 
-        .timer {
-            margin-top: 2rem;
-            font-size: 1.5rem;
-            color: #333;
-        }
+    .instructions {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      font-family: system-ui;
+      color: #333;
+      pointer-events: none;
+      z-index: 10;
+    }
 
-        .instructions {
-            margin-bottom: 2rem;
-            color: #666;
-            text-align: center;
-            padding: 0 1rem;
-        }
-    </style>
+    #timer {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      font-family: system-ui;
+      font-size: 24px;
+      color: #333;
+      pointer-events: none;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+  </style>
 </head>
 <body>
-    <div class="instructions">Press and hold the circle for 4 seconds to feel vibration</div>
-    <div class="touch-area">Hold Here</div>
-    <div class="timer">0.0s</div>
+  <div id="container">
+    <div class="instructions">Hold your finger down to fill with color</div>
+    <div id="timer">16</div>
+    <div id="overlay"></div>
+  </div>
 
-    <script>
-        const touchArea = document.querySelector('.touch-area');
-        const timer = document.querySelector('.timer');
-        let startTime = null;
-        let animationFrame = null;
-        let hasVibrated = false;
+  <script>
+    const container = document.getElementById('container');
+    const overlay = document.getElementById('overlay');
+    const timer = document.getElementById('timer');
+    const instructions = document.querySelector('.instructions');
+    
+    let isHolding = false;
+    let isOnCooldown = false;
+    let fillTimeout = null;
+    let reverseTimeout = null;
+    let cooldownTimeout = null;
+    let cooldownInterval = null;
+    
+    const colors = [
+      '#FF6B6B',
+      '#4ECDC4',
+      '#45B7D1',
+      '#96CEB4',
+      '#FFEEAD'
+    ];
+    let currentColorIndex = 0;
 
-        function updateTimer(timestamp) {
-            if (!startTime) startTime = timestamp;
-            const elapsed = (timestamp - startTime) / 1000;
-            timer.textContent = `${elapsed.toFixed(1)}s`;
+    function updateTimerDisplay(seconds) {
+      timer.textContent = seconds;
+    }
 
-            if (elapsed >= 4 && !hasVibrated) {
-                if ('vibrate' in navigator) {
-                    navigator.vibrate(200);
-                }
-                hasVibrated = true;
-                touchArea.textContent = 'Vibrating!';
-            }
-
-            animationFrame = requestAnimationFrame(updateTimer);
+    function startCooldownTimer() {
+      let secondsLeft = 16;
+      timer.style.opacity = '1';
+      updateTimerDisplay(secondsLeft);
+      
+      cooldownInterval = setInterval(() => {
+        secondsLeft--;
+        updateTimerDisplay(secondsLeft);
+        if (secondsLeft <= 0) {
+          clearInterval(cooldownInterval);
+          timer.style.opacity = '0';
         }
+      }, 1000);
+    }
 
-        touchArea.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            hasVibrated = false;
-            touchArea.textContent = 'Keep holding...';
-            startTime = null;
-            animationFrame = requestAnimationFrame(updateTimer);
-        });
+    function startFill() {
+      if (isOnCooldown) return;
+      
+      isHolding = true;
+      isOnCooldown = true;
+      instructions.textContent = "Color filling...";
+      
+      // Clear any existing timeouts
+      clearTimeout(fillTimeout);
+      clearTimeout(reverseTimeout);
+      clearTimeout(cooldownTimeout);
+      clearInterval(cooldownInterval);
+      
+      overlay.style.backgroundColor = colors[currentColorIndex];
+      overlay.style.height = '100%';
+      
+      // Start the cooldown timer display
+      startCooldownTimer();
+      
+      // Fill animation complete
+      fillTimeout = setTimeout(() => {
+        if (isHolding) {
+          instructions.textContent = "Holding color...";
+          // Hold for 4 seconds then reverse
+          reverseTimeout = setTimeout(() => {
+            instructions.textContent = "Color draining...";
+            overlay.style.height = '0%';
+            // After reverse is complete
+            setTimeout(() => {
+              if (!isHolding) {
+                currentColorIndex = (currentColorIndex + 1) % colors.length;
+                instructions.textContent = "Please wait...";
+                // Add remaining cooldown time (16 - 12 = 4 seconds)
+                cooldownTimeout = setTimeout(() => {
+                  isOnCooldown = false;
+                  instructions.textContent = "Hold your finger down to fill with color";
+                }, 4000);
+              }
+            }, 4000);
+          }, 4000);
+        }
+      }, 4000);
+    }
 
-        touchArea.addEventListener('pointerup', () => {
-            if (animationFrame) {
-                cancelAnimationFrame(animationFrame);
-            }
-            timer.textContent = '0.0s';
-            touchArea.textContent = 'Hold Here';
-        });
+    function resetFill() {
+      isHolding = false;
+      // Only reset immediately if we haven't completed the fill
+      if (!fillTimeout) {
+        overlay.style.height = '0%';
+        currentColorIndex = (currentColorIndex + 1) % colors.length;
+      }
+    }
 
-        touchArea.addEventListener('pointerleave', () => {
-            if (animationFrame) {
-                cancelAnimationFrame(animationFrame);
-            }
-            timer.textContent = '0.0s';
-            touchArea.textContent = 'Hold Here';
-        });
-    </script>
+    // Touch events
+    container.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      startFill();
+    });
+
+    container.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      resetFill();
+    });
+
+    // Mouse events for desktop testing
+    container.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startFill();
+    });
+
+    container.addEventListener('mouseup', (e) => {
+      e.preventDefault();
+      resetFill();
+    });
+
+    // Handle edge cases
+    container.addEventListener('mouseleave', resetFill);
+    container.addEventListener('touchcancel', resetFill);
+  </script>
 </body>
 </html>
